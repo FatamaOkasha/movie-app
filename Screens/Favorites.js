@@ -1,25 +1,39 @@
 import { StyleSheet, Text, View } from 'react-native';
-import React, { useContext } from 'react';
+import React, { useContext, useEffect } from 'react';
 import { MoviesContext } from '../Context/MoviesContextProvider';
 import { Card, IconButton } from 'react-native-paper';
 import { ScrollView } from 'react-native-gesture-handler';
 import { useNavigation } from '@react-navigation/native';
 import routes from '../utils/Routes';
+import { db } from '../firebaseConfig'; // Import your Firestore instance
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
 export default function Favorites() {
-  const {navigate}=useNavigation();
-
+  const { navigate } = useNavigation();
   const { favorites, dispatch } = useContext(MoviesContext);
   const imgPath = "https://image.tmdb.org/t/p/w500/";
 
-  function handleRemove(id){
-    
-    dispatch({ type: "DeleteFavMovie", payload: {id} });
-    
-  };
-  if (favorites.length===0) navigate(routes.Home);
+  useEffect(() => {
+    // Add favorites to Firestore on component mount
+    const addFavoritesToFirestore = async () => {
+      for (const movie of favorites) {
+        const movieRef = doc(collection(db, 'favorites'), movie.id.toString());
+        await addDoc(movieRef, movie);
+      }
+    };
 
-     
+    if (favorites.length > 0) {
+      addFavoritesToFirestore();
+    }
+  }, [favorites]);
+
+  function handleRemove(id) {
+    dispatch({ type: "DeleteFavMovie", payload: { id } });
+    const movieRef = doc(db, 'favorites', id.toString());
+    deleteDoc(movieRef).catch((error) => console.error("Error removing movie: ", error));
+  };
+
+  if (favorites.length === 0) navigate(routes.Home);
 
   return (
     <ScrollView style={styles.container}>
@@ -53,13 +67,13 @@ export default function Favorites() {
               />
             </Card.Actions>
           </Card>
-          
         ))
       )}
     </ScrollView>
   );
 }
-//styles
+
+// Styles
 const styles = StyleSheet.create({
   container: {
     flex: 1,

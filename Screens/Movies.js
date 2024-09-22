@@ -4,6 +4,8 @@ import { Card, Text, ActivityIndicator, IconButton } from "react-native-paper";
 import RNPickerSelect from "react-native-picker-select";
 import { useNavigation } from "@react-navigation/native";
 import { MoviesContext } from "../Context/MoviesContextProvider";
+import { db } from '../firebaseConfig'; // Import your Firestore instance
+import { collection, addDoc, deleteDoc, doc } from 'firebase/firestore';
 
 export default function Movies() {
   const {
@@ -41,7 +43,6 @@ export default function Movies() {
   }
 
   function handleSearch(val) {
-    
     setText(val);
     const MoviesForSearch = selectedFilter ? filteredMovies : movies;
     if (val.trim() === "") {
@@ -82,6 +83,22 @@ export default function Movies() {
       }))
     );
   }
+
+  const handleFavoriteToggle = async (movie) => {
+    const isFavorite = favorites.some((fav) => fav.id === movie.id);
+    if (isFavorite) {
+      // Remove from favorites
+      dispatch({ type: "DeleteFavMovie", payload: { id: movie.id } });
+      const movieRef = doc(db, 'favorites', movie.id.toString());
+      await deleteDoc(movieRef).catch((error) => console.error("Error removing favorite: ", error));
+    } else {
+      // Add to favorites
+      dispatch({ type: "AddFavMovie", payload: { movie } });
+      const movieRef = doc(collection(db, 'favorites'), movie.id.toString());
+      await addDoc(movieRef, movie).catch((error) => console.error("Error adding favorite: ", error));
+    }
+    handleFilter(selectedFilter);
+  };
 
   const moviesToRender = selectedFilter ? filteredMovies : searchMovies;
 
@@ -127,10 +144,7 @@ export default function Movies() {
               style={styles.iconButton}
               icon={movie.isFavorite ? "heart" : "heart-outline"}
               color={movie.isFavorite ? "red" : "white"}
-              onPress={() => {
-                dispatch({ type: "TogglingFav", payload: { id: movie.id } });
-                handleFilter(selectedFilter);
-              }}
+              onPress={() => handleFavoriteToggle(movie)}
               size={30}
             />
           </Card.Actions>

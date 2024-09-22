@@ -1,6 +1,8 @@
 import { StyleSheet, Text, View } from "react-native";
 import React, { createContext, useEffect, useReducer } from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import { db } from '../firebaseConfig'; // Adjust the path to your firebase config
+import { doc, setDoc } from "firebase/firestore";
 
 export const MoviesContext = createContext();
 
@@ -34,30 +36,16 @@ function reducer(state, action) {
       const updatedFavorites = updatedMovies.filter(
         (movie) => movie.isFavorite
       );
-      const updatedNowPlaying = state.nowPlayingMovies.map((movie) =>
-        movie.id === action.payload.id
-          ? { ...movie, isFavorite: !movie.isFavorite }
-          : movie
-      );
-      const updatedTopMovies = state.TopMovies.map((movie) =>
-        movie.id === action.payload.id
-          ? { ...movie, isFavorite: !movie.isFavorite }
-          : movie
-      );
-      const updatedUpcomingMovies = state.UpcomingMovies.map((movie) =>
-        movie.id === action.payload.id
-          ? { ...movie, isFavorite: !movie.isFavorite }
-          : movie
-      );
 
+      // Update favorites in AsyncStorage
       AsyncStorage.setItem("favorites", JSON.stringify(updatedFavorites));
       return {
         ...state,
         movies: updatedMovies,
         favorites: updatedFavorites,
-        nowPlayingMovies: updatedNowPlaying,
-        TopMovies: updatedTopMovies,
-        UpcomingMovies: updatedUpcomingMovies,
+        nowPlayingMovies: state.nowPlayingMovies,
+        TopMovies: state.TopMovies,
+        UpcomingMovies: state.UpcomingMovies,
       };
 
     case "DeleteFavMovie":
@@ -73,21 +61,6 @@ function reducer(state, action) {
             ? { ...movie, isFavorite: false }
             : movie
         ),
-        nowPlayingMovies: state.nowPlayingMovies.map((movie) =>
-          movie.id === action.payload.id
-            ? { ...movie, isFavorite: false }
-            : movie
-        ),
-        TopMovies: state.TopMovies.map((movie) =>
-          movie.id === action.payload.id
-            ? { ...movie, isFavorite: false }
-            : movie
-        ),
-        UpcomingMovies: state.UpcomingMovies.map((movie) =>
-          movie.id === action.payload.id
-            ? { ...movie, isFavorite: false }
-            : movie
-        ),
       };
 
     case "PlayingMovies":
@@ -99,25 +72,23 @@ function reducer(state, action) {
     case "UpcomingMovies":
       return { ...state, UpcomingMovies: action.payload, loading: false };
 
-    case "Popular":
-      return { ...state, Popular: action.payload, loading: false };
-
     default:
       throw new Error("Unknown Action");
   }
 }
 
+const addFavoriteToFirestore = async (movie) => {
+  try {
+    const movieRef = doc.add(db, "favorites", movie.id.toString());
+    await setDoc(movieRef, movie);
+  } catch (error) {
+    console.error("Error adding favorite movie to Firestore:", error);
+  }
+};
+
 export default function MoviesContextProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, initialState);
-  const {
-    movies,
-    loading,
-    isFavorite,
-    favorites,
-    nowPlayingMovies,
-    TopMovies,
-    UpcomingMovies,
-  } = state;
+  const { movies, loading, favorites, nowPlayingMovies, TopMovies, UpcomingMovies } = state;
 
   useEffect(() => {
     AsyncStorage.getItem("favorites").then((favoritesJSON) => {
@@ -125,7 +96,6 @@ export default function MoviesContextProvider({ children }) {
         const favoritesArray = JSON.parse(favoritesJSON);
         dispatch({ type: "setFavorites", payload: favoritesArray });
 
-     
         const updateFavoriteStatus = (movieList) =>
           movieList.map((movie) => ({
             ...movie,
@@ -136,12 +106,10 @@ export default function MoviesContextProvider({ children }) {
           type: "PlayingMovies",
           payload: updateFavoriteStatus(nowPlayingMovies),
         });
-
         dispatch({
           type: "TopMovies",
           payload: updateFavoriteStatus(TopMovies),
         });
-
         dispatch({
           type: "UpcomingMovies",
           payload: updateFavoriteStatus(UpcomingMovies),
@@ -152,9 +120,7 @@ export default function MoviesContextProvider({ children }) {
 
   useEffect(() => {
     dispatch({ type: "setLoading", payload: true });
-    fetch(
-      "https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc&api_key=c17114483fb1dea2caf4f8a59fe2d604"
-    )
+    fetch("https://api.themoviedb.org/3/discover/movie?sort_by=popularity.desc&api_key=c17114483fb1dea2caf4f8a59fe2d604")
       .then((res) => res.json())
       .then((data) => {
         dispatch({ type: "dataReceived", payload: data.results });
@@ -166,9 +132,7 @@ export default function MoviesContextProvider({ children }) {
   }, []);
 
   useEffect(() => {
-    fetch(
-      "https://api.themoviedb.org/3/movie/now_playing?api_key=c17114483fb1dea2caf4f8a59fe2d604"
-    )
+    fetch("https://api.themoviedb.org/3/movie/now_playing?api_key=c17114483fb1dea2caf4f8a59fe2d604")
       .then((res) => res.json())
       .then((data) => {
         dispatch({ type: "PlayingMovies", payload: data.results });
@@ -180,9 +144,7 @@ export default function MoviesContextProvider({ children }) {
   }, [dispatch]);
 
   useEffect(() => {
-    fetch(
-      "https://api.themoviedb.org/3/movie/top_rated?api_key=c17114483fb1dea2caf4f8a59fe2d604"
-    )
+    fetch("https://api.themoviedb.org/3/movie/top_rated?api_key=c17114483fb1dea2caf4f8a59fe2d604")
       .then((res) => res.json())
       .then((data) => {
         dispatch({ type: "TopMovies", payload: data.results });
@@ -194,9 +156,7 @@ export default function MoviesContextProvider({ children }) {
   }, [dispatch]);
 
   useEffect(() => {
-    fetch(
-      "https://api.themoviedb.org/3/movie/upcoming?api_key=c17114483fb1dea2caf4f8a59fe2d604"
-    )
+    fetch("https://api.themoviedb.org/3/movie/upcoming?api_key=c17114483fb1dea2caf4f8a59fe2d604")
       .then((res) => res.json())
       .then((data) => {
         dispatch({ type: "UpcomingMovies", payload: data.results });
@@ -207,17 +167,29 @@ export default function MoviesContextProvider({ children }) {
       });
   }, [dispatch]);
 
+  const toggleFavorite = async (movie) => {
+    dispatch({ type: "TogglingFav", payload: movie });
+    if (!movie.isFavorite) {
+      await addFavoriteToFirestore(movie);
+    }
+  };
+
   return (
     <MoviesContext.Provider
       value={{
         movies,
         loading,
-        isFavorite,
         favorites,
         nowPlayingMovies,
         TopMovies,
         UpcomingMovies,
-        dispatch,
+        dispatch: (action) => {
+          if (action.type === "TogglingFav") {
+            toggleFavorite(action.payload);
+          } else {
+            dispatch(action);
+          }
+        },
       }}
     >
       {children}
